@@ -1,0 +1,14 @@
+# Build output
+bin/
+obj/
+TestResults/
+
+# IDE and OS files
+.vs/
+.vscode/
+.idea/
+*.user
+.DS_Store
+
+# Local secrets
+.env
