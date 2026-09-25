@@ -39,7 +39,7 @@ Docker must be running because the tests start a throwaway PostgreSQL container 
 
 ## Architecture
 
-CantinaApi uses a vertical slice layout: each feature under `Features/` owns its endpoints, request and response types, validation and data access, while `Common/` holds cross-cutting helpers and `Data/` holds the `DbContext`, migrations and seeding. All endpoints stay in the API assembly because the .NET 10 validation source generator only discovers types in the assembly that calls `AddValidation`. The request pipeline runs in this order: correlation id, exception handler, status code pages, Serilog request logging, routing, rate limiter, authentication, authorization, then endpoints. The exception handler wraps everything so every failure becomes an RFC 7807 ProblemDetails response, and status code pages give bare error codes, such as an unreadable request body, the same ProblemDetails shape. Request logging sits inside both so it records failures and timings. Routing runs before rate limiting and auth so they can read endpoint metadata.
+CantinaApi uses a vertical slice layout: each feature under `Features/` owns its endpoints, request and response types, validation and data access, while `Common/` holds cross-cutting helpers and `Data/` holds the `DbContext`, migrations and seeding. All endpoints stay in the API assembly because the .NET 10 validation source generator only discovers types in the assembly that calls `AddValidation`. The request pipeline runs in this order: forwarded headers (only for configured proxies), correlation id, exception handler, status code pages, Serilog request logging, routing, rate limiter, authentication, authorization, then endpoints. The exception handler wraps everything so every failure becomes an RFC 7807 ProblemDetails response, and status code pages give bare error codes, such as an unreadable request body, the same ProblemDetails shape. Request logging sits inside both so it records failures and timings. Routing runs before rate limiting and auth so they can read endpoint metadata.
 
 ## Authentication
 
@@ -148,7 +148,26 @@ curl -i -X POST http://localhost:8080/api/menu-items/{id}/ratings \
 
 ## Security
 
-_Documented in a later phase._
+Login and registration are protected by four layers. Each one covers a gap the others leave.
+
+| Layer | What it does | Default | Configuration |
+| --- | --- | --- | --- |
+| Account lockout | 5 wrong passwords in a row lock the account for 15 minutes. While it is locked, every login fails, even with the right password, and failed attempts neither count nor extend the lockout. A successful login resets the counter. | 5 attempts, 15 minutes | `Auth:Lockout:MaxFailedAttempts`, `Auth:Lockout:DurationMinutes` |
+| Per-IP rate limits | Each client IP gets its own fixed window for login and a separate one for registration, so spending one budget does not touch the other. Extra requests get 429 with a `Retry-After` header. | Login 10 per 60 s, register 5 per 60 s | `RateLimiting:Login:PermitLimit`, `RateLimiting:Login:WindowSeconds`, `RateLimiting:Register:PermitLimit`, `RateLimiting:Register:WindowSeconds` |
+| Identical responses and timing | An unknown email, a wrong password and a locked account all return the same 401 `Invalid credentials` body. Every failure also runs a bcrypt check (against a dummy hash when there is no real one) and the same database statements, so neither the response nor its timing reveals which case happened. | Always on | `Auth:BcryptWorkFactor` (12) sets the hashing cost |
+| Logging | Warnings for a login on an unknown email, on a locked account, when an account gets locked, and for every rate limit rejection, each with the client IP. Passwords are never logged. | Always on | Serilog levels in `appsettings.json` |
+
+The failed-attempt counter is updated with a single SQL `UPDATE`, so a burst of parallel guesses cannot slip past the limit by racing each other.
+
+### Client IPs and proxies
+
+Rate limits and logs use the TCP connection's address. `X-Forwarded-For` is ignored unless the proxy's address is listed in `ForwardedHeaders:KnownProxies` (for example `ForwardedHeaders__KnownProxies__0=10.0.0.5`). Any client can send that header, so trusting it by default would let an attacker pick a new fake IP for every request and never hit a limit. When the API runs behind a load balancer or reverse proxy, list its address there so the real client IP is used.
+
+### Known trade-offs
+
+- **Lockout can be used against a real customer.** Anyone who knows an email can keep it locked by sending 5 wrong passwords every 15 minutes. A production system would add progressive delays, a CAPTCHA after a few failures, or email the owner instead of locking outright.
+- **Rate limits are in memory, per instance.** Each API instance counts on its own and the counts reset on restart. A deployment with several instances needs a shared limiter, for example one backed by Redis.
+- **IP limits can be dodged by a botnet.** Spreading guesses across many IPs gets past per-IP limits. Account lockout still caps guesses against any single account, whatever the source.
 
 ## Performance
 

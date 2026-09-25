@@ -1,5 +1,6 @@
 using CantinaApi.Common;
 using CantinaApi.Common.Auth;
+using CantinaApi.Common.RateLimiting;
 using CantinaApi.Data;
 using CantinaApi.Data.Configurations;
 using CantinaApi.Data.Entities;
@@ -15,7 +16,8 @@ public static class Register
         group.MapPost("/register", HandleAsync)
             .WithName(nameof(Register))
             .WithSummary("Register a customer account.")
-            .AllowAnonymous();
+            .AllowAnonymous()
+            .RequireRateLimiting(RateLimitPolicies.Register);
 
     private static async Task<Results<Created<UserResponse>, ProblemHttpResult>> HandleAsync(
         RegisterRequest request, CantinaDbContext db, PasswordHasher passwordHasher, TimeProvider timeProvider, CancellationToken cancellationToken)

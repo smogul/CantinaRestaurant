@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace CantinaApi.Tests.Infrastructure;
 
@@ -16,6 +18,9 @@ public sealed class CustomWebApplicationFactory(PostgresFixture postgres) : WebA
 
     public TestUsers Users { get; private set; } = null!;
 
+    // Starts at the real time so tokens look normal; each read nudges it forward so consecutive timestamps still differ.
+    public FakeTimeProvider Time { get; } = new(DateTimeOffset.UtcNow) { AutoAdvanceAmount = TimeSpan.FromMilliseconds(1) };
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:CantinaDb", postgres.ConnectionString);
@@ -28,6 +33,13 @@ public sealed class CustomWebApplicationFactory(PostgresFixture postgres) : WebA
 
         // Tests start from an empty database and create exactly the data they assert on.
         builder.UseSetting("Seed:Enabled", "false");
+
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<TimeProvider>();
+            services.AddSingleton<TimeProvider>(Time);
+            services.AddSingleton<IStartupFilter, TestClientIpStartupFilter>();
+        });
     }
 
     // Starting the host runs the same migrate step as production; the test users are then created once for the run.

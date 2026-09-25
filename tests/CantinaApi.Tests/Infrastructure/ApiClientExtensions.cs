@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CantinaApi.Features.Auth;
 using CantinaApi.Features.MenuItems;
 using CantinaApi.Features.Ratings;
 
@@ -45,6 +46,29 @@ public static class ApiClientExtensions
         var response = await client.PostJsonAsync(RatingsRoute(menuItemId), request, cancellationToken);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return await response.ReadJsonAsync<RatingResponse>(cancellationToken);
+    }
+
+    // Sends a login, optionally from a specific client IP or with a fixed correlation id.
+    public static async Task<HttpResponseMessage> PostLoginAsync(
+        this HttpClient client, string email, string password, CancellationToken cancellationToken, string? clientIp = null, string? correlationId = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
+        {
+            Content = JsonContent.Create(new LoginRequest(email, password), options: JsonOptions),
+        };
+
+        if (clientIp is not null)
+        {
+            request.Headers.Remove(TestClientIpStartupFilter.HeaderName);
+            request.Headers.Add(TestClientIpStartupFilter.HeaderName, clientIp);
+        }
+
+        if (correlationId is not null)
+        {
+            request.Headers.Add("X-Correlation-Id", correlationId);
+        }
+
+        return await client.SendAsync(request, cancellationToken);
     }
 
     // Asserts an RFC 7807 body and returns it for further checks.

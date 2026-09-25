@@ -25,12 +25,23 @@ public static class AuthServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        services.AddOptions<BruteForceOptions>()
+            .Configure<IConfiguration>((bruteForce, config) =>
+            {
+                config.GetSection(BruteForceOptions.LockoutSection).Bind(bruteForce.Lockout);
+                config.GetSection(BruteForceOptions.LoginRateLimitSection).Bind(bruteForce.Login);
+                config.GetSection(BruteForceOptions.RegisterRateLimitSection).Bind(bruteForce.Register);
+                bruteForce.KnownProxies = config.GetSection(BruteForceOptions.KnownProxiesSection).Get<string[]>() ?? [];
+            })
+            .Validate(bruteForce => bruteForce.IsValid(out _), "Brute-force settings are invalid; check Auth:Lockout, RateLimiting and ForwardedHeaders.")
+            .ValidateOnStart();
+
         services.AddSingleton<PasswordHasher>();
         services.AddSingleton<JwtTokenService>();
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-            .Configure<IOptions<JwtOptions>>((bearer, jwtOptions) =>
+            .Configure<IOptions<JwtOptions>, TimeProvider>((bearer, jwtOptions, timeProvider) =>
             {
                 var jwt = jwtOptions.Value;
 
@@ -47,6 +58,15 @@ public static class AuthServiceCollectionExtensions
                     IssuerSigningKey = JwtTokenService.CreateSigningKey(jwt.SigningKey),
                     ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
                     ClockSkew = TimeSpan.FromSeconds(30),
+
+                    // Checks nbf and exp against the injected clock that also issues tokens and runs lockouts, so tests can move time consistently.
+                    LifetimeValidator = (notBefore, expires, _, parameters) =>
+                    {
+                        var now = timeProvider.GetUtcNow().UtcDateTime;
+                        return expires is not null
+                            && expires.Value > now - parameters.ClockSkew
+                            && (notBefore is null || notBefore.Value <= now + parameters.ClockSkew);
+                    },
                     NameClaimType = ClaimNames.Name,
                     RoleClaimType = ClaimNames.Role,
                 };

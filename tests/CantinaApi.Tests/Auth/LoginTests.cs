@@ -19,7 +19,7 @@ public sealed class LoginTests(CustomWebApplicationFactory factory) : ApiTestBas
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var token = await response.ReadJsonAsync<AccessTokenResponse>(CancellationToken);
         Assert.Equal("Bearer", token.TokenType);
-        Assert.InRange(token.ExpiresAtUtc, DateTime.UtcNow.AddMinutes(59), DateTime.UtcNow.AddMinutes(61));
+        Assert.InRange(token.ExpiresAtUtc, UtcNow.AddMinutes(59), UtcNow.AddMinutes(61));
 
         using var request = new HttpRequestMessage(HttpMethod.Get, ApiClientExtensions.MenuItemsRoute);
         request.Headers.Authorization = new AuthenticationHeaderValue(token.TokenType, token.AccessToken);

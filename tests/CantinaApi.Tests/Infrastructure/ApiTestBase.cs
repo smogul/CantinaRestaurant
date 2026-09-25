@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using CantinaApi.Data;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 
 namespace CantinaApi.Tests.Infrastructure;
 
@@ -18,6 +19,10 @@ public abstract class ApiTestBase : IAsyncLifetime
     }
 
     protected TestUsers Users => _factory.Users;
+
+    protected FakeTimeProvider Time => _factory.Time;
+
+    protected DateTime UtcNow => Time.GetUtcNow().UtcDateTime;
 
     protected HttpClient AnonymousClient { get; }
 
@@ -38,9 +43,11 @@ public abstract class ApiTestBase : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    protected HttpClient CreateClient(string? accessToken)
+    // Each client gets its own random IP so rate limit buckets never leak between tests.
+    protected HttpClient CreateClient(string? accessToken, string? clientIp = null)
     {
         var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestClientIpStartupFilter.HeaderName, clientIp ?? TestClientIpStartupFilter.RandomAddress().ToString());
         if (accessToken is not null)
         {
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);

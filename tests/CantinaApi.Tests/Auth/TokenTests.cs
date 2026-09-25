@@ -51,7 +51,7 @@ public sealed class TokenTests(CustomWebApplicationFactory factory) : ApiTestBas
     public async Task ExpiredToken_ReturnsUnauthorized()
     {
         var token = TestTokens.Create(
-            Users.Customer, "Customer", notBeforeUtc: DateTime.UtcNow.AddHours(-2), expiresUtc: DateTime.UtcNow.AddMinutes(-5));
+            Users.Customer, "Customer", notBeforeUtc: UtcNow.AddHours(-2), expiresUtc: UtcNow.AddMinutes(-5));
 
         var response = await CreateClient(token).GetAsync(MenuItemsRoute, CancellationToken);
 
@@ -62,7 +62,7 @@ public sealed class TokenTests(CustomWebApplicationFactory factory) : ApiTestBas
     public async Task TokenSignedWithAnotherKey_ReturnsUnauthorized()
     {
         var token = TestTokens.Create(
-            Users.Admin, "Admin", DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(30), signingKey: "some-other-signing-key-that-is-long-enough-0123");
+            Users.Admin, "Admin", UtcNow.AddMinutes(-1), UtcNow.AddMinutes(30), signingKey: "some-other-signing-key-that-is-long-enough-0123");
 
         var response = await CreateClient(token).GetAsync(MenuItemsRoute, CancellationToken);
 
@@ -73,7 +73,7 @@ public sealed class TokenTests(CustomWebApplicationFactory factory) : ApiTestBas
     public async Task ValidTestToken_IsAccepted()
     {
         // Guards the tests above: a token minted the same way with the right key does work.
-        var token = TestTokens.Create(Users.Customer, "Customer", DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(30));
+        var token = TestTokens.Create(Users.Customer, "Customer", UtcNow.AddMinutes(-1), UtcNow.AddMinutes(30));
 
         var response = await CreateClient(token).GetAsync(MenuItemsRoute, CancellationToken);
 

@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using CantinaApi.Common;
 using CantinaApi.Common.Auth;
+using CantinaApi.Common.Http;
+using CantinaApi.Common.RateLimiting;
 using CantinaApi.Data;
 using CantinaApi.Features.Auth;
 using CantinaApi.Features.MenuItems;
@@ -44,13 +46,20 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddOptions<SeedOptions>().Bind(builder.Configuration.GetSection(SeedOptions.SectionName));
 builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 builder.Services.AddHybridCache();
-builder.Services.AddRateLimiter(options => options.RejectionStatusCode = StatusCodes.Status429TooManyRequests);
+builder.Services.AddCantinaRateLimiting();
+builder.Services.AddCantinaForwardedHeaders();
 builder.Services.AddCantinaAuth(builder.Configuration);
 builder.Services.AddHealthChecks().AddDbContextCheck<CantinaDbContext>("database");
 
 var app = builder.Build();
 
+// Built now so its dummy hash exists before the first login, keeping every login path equally slow.
+app.Services.GetRequiredService<PasswordHasher>();
+
 await app.MigrateAndSeedDatabaseAsync();
+
+// Runs first so the client IP is settled before anything logs or rate limits; it only trusts configured proxies.
+app.UseForwardedHeaders();
 
 // Runs ahead of the pipeline below so every request log line and response, including errors, carries the id.
 app.UseMiddleware<CorrelationIdMiddleware>();
