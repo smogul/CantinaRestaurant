@@ -1,4 +1,5 @@
 using CantinaApi.Common;
+using CantinaApi.Common.Auth;
 using CantinaApi.Data;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +11,8 @@ public static class UpdateMenuItem
     public static void Map(IEndpointRouteBuilder group) =>
         group.MapPut("/{id:guid}", HandleAsync)
             .WithName(nameof(UpdateMenuItem))
-            .WithSummary("Replace all fields of a menu item.");
+            .WithSummary("Replace all fields of a menu item.")
+            .RequireAuthorization(Policies.AdminOnly);
 
     private static async Task<Results<Ok<MenuItemResponse>, ProblemHttpResult>> HandleAsync(
         Guid id, MenuItemRequest request, CantinaDbContext db, TimeProvider timeProvider, CancellationToken cancellationToken)

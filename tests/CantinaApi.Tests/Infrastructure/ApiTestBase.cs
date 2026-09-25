@@ -1,25 +1,58 @@
+using System.Net.Http.Headers;
 using CantinaApi.Data;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CantinaApi.Tests.Infrastructure;
 
-public abstract class ApiTestBase(CustomWebApplicationFactory factory) : IAsyncLifetime
+public abstract class ApiTestBase : IAsyncLifetime
 {
-    protected HttpClient Client { get; } = factory.CreateClient();
+    private readonly CustomWebApplicationFactory _factory;
+    private readonly List<HttpClient> _clients = [];
+
+    protected ApiTestBase(CustomWebApplicationFactory factory)
+    {
+        _factory = factory;
+        AnonymousClient = CreateClient(accessToken: null);
+        AdminClient = CreateClient(Users.Admin.AccessToken);
+        CustomerClients = Users.Customers.Select(customer => CreateClient(customer.AccessToken)).ToArray();
+    }
+
+    protected TestUsers Users => _factory.Users;
+
+    protected HttpClient AnonymousClient { get; }
+
+    // Admins manage the menu and can read everything, so most menu tests act as the admin.
+    protected HttpClient AdminClient { get; }
+
+    protected IReadOnlyList<HttpClient> CustomerClients { get; }
+
+    protected HttpClient CustomerClient => CustomerClients[0];
 
     protected static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
-    public async ValueTask InitializeAsync() => await factory.ResetDatabaseAsync(CancellationToken);
+    public async ValueTask InitializeAsync() => await _factory.ResetDatabaseAsync(CancellationToken);
 
     public ValueTask DisposeAsync()
     {
-        Client.Dispose();
+        _clients.ForEach(client => client.Dispose());
         return ValueTask.CompletedTask;
+    }
+
+    protected HttpClient CreateClient(string? accessToken)
+    {
+        var client = _factory.CreateClient();
+        if (accessToken is not null)
+        {
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        }
+
+        _clients.Add(client);
+        return client;
     }
 
     protected async Task<T> QueryDatabaseAsync<T>(Func<CantinaDbContext, Task<T>> query)
     {
-        await using var scope = factory.Services.CreateAsyncScope();
+        await using var scope = _factory.Services.CreateAsyncScope();
         return await query(scope.ServiceProvider.GetRequiredService<CantinaDbContext>());
     }
 }

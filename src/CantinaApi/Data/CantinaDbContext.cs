@@ -7,6 +7,7 @@ public sealed class CantinaDbContext(DbContextOptions<CantinaDbContext> options)
 {
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
     public DbSet<Rating> Ratings => Set<Rating>();
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

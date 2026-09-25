@@ -1,3 +1,4 @@
+using CantinaApi.Common.Auth;
 using CantinaApi.Data;
 using CantinaApi.Data.Entities;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -9,7 +10,8 @@ public static class CreateMenuItem
     public static void Map(IEndpointRouteBuilder group) =>
         group.MapPost("/", HandleAsync)
             .WithName(nameof(CreateMenuItem))
-            .WithSummary("Create a menu item.");
+            .WithSummary("Create a menu item.")
+            .RequireAuthorization(Policies.AdminOnly);
 
     private static async Task<Results<CreatedAtRoute<MenuItemResponse>, ProblemHttpResult>> HandleAsync(
         MenuItemRequest request, CantinaDbContext db, TimeProvider timeProvider, CancellationToken cancellationToken)

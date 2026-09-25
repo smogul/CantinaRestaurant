@@ -10,7 +10,7 @@ public sealed class HealthCheckTests(CustomWebApplicationFactory factory) : ApiT
     [Fact]
     public async Task GetHealth_ReturnsOkWithHealthyDatabase()
     {
-        var response = await Client.GetAsync("/health", CancellationToken);
+        var response = await AnonymousClient.GetAsync("/health", CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.ReadJsonAsync<JsonElement>(CancellationToken);

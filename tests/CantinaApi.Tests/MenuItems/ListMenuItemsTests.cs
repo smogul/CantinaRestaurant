@@ -15,7 +15,7 @@ public sealed class ListMenuItemsTests(CustomWebApplicationFactory factory) : Ap
     {
         foreach (var name in new[] { "Echo", "Alpha", "Delta", "Charlie", "Bravo" })
         {
-            await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName(name).Build(), CancellationToken);
+            await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName(name).Build(), CancellationToken);
         }
 
         var first = await GetPageAsync($"{MenuItemsRoute}?page=1&pageSize=2");
@@ -33,8 +33,8 @@ public sealed class ListMenuItemsTests(CustomWebApplicationFactory factory) : Ap
     [Fact]
     public async Task List_UsesDefaultPagingAndOrdersByName()
     {
-        await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Mynock Wings").Build(), CancellationToken);
-        await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Gorg Skewers").Build(), CancellationToken);
+        await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Mynock Wings").Build(), CancellationToken);
+        await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Gorg Skewers").Build(), CancellationToken);
 
         var page = await GetPageAsync(MenuItemsRoute);
 
@@ -45,8 +45,8 @@ public sealed class ListMenuItemsTests(CustomWebApplicationFactory factory) : Ap
     [Fact]
     public async Task List_FiltersByType()
     {
-        await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Bantha Burger").WithType(MenuItemType.Dish).Build(), CancellationToken);
-        await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Blue Milk").WithType(MenuItemType.Drink).Build(), CancellationToken);
+        await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Bantha Burger").WithType(MenuItemType.Dish).Build(), CancellationToken);
+        await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Blue Milk").WithType(MenuItemType.Drink).Build(), CancellationToken);
 
         var drinks = await GetPageAsync($"{MenuItemsRoute}?type=Drink");
 
@@ -64,5 +64,5 @@ public sealed class ListMenuItemsTests(CustomWebApplicationFactory factory) : Ap
     }
 
     private async Task<PagedResponse<MenuItemResponse>> GetPageAsync(string url) =>
-        await (await Client.GetAsync(url, CancellationToken)).ReadJsonAsync<PagedResponse<MenuItemResponse>>(CancellationToken);
+        await (await AdminClient.GetAsync(url, CancellationToken)).ReadJsonAsync<PagedResponse<MenuItemResponse>>(CancellationToken);
 }

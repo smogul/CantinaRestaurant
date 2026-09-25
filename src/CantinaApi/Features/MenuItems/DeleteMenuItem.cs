@@ -1,4 +1,5 @@
 using CantinaApi.Common;
+using CantinaApi.Common.Auth;
 using CantinaApi.Data;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +11,8 @@ public static class DeleteMenuItem
     public static void Map(IEndpointRouteBuilder group) =>
         group.MapDelete("/{id:guid}", HandleAsync)
             .WithName(nameof(DeleteMenuItem))
-            .WithSummary("Soft delete a menu item; its ratings are kept.");
+            .WithSummary("Soft delete a menu item; its ratings are kept.")
+            .RequireAuthorization(Policies.AdminOnly);
 
     private static async Task<Results<NoContent, ProblemHttpResult>> HandleAsync(
         Guid id, CantinaDbContext db, TimeProvider timeProvider, CancellationToken cancellationToken)

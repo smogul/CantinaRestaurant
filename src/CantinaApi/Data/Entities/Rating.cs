@@ -8,11 +8,12 @@ public sealed class Rating
 
     public Guid Id { get; set; }
     public Guid MenuItemId { get; set; }
-    public Guid? UserId { get; set; }
+    public Guid UserId { get; set; }
     public int Stars { get; set; }
     public string? Comment { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
 
     public MenuItem MenuItem { get; set; } = null!;
+    public User User { get; set; } = null!;
 }

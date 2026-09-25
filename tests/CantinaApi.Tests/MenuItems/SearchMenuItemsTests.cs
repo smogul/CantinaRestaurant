@@ -52,7 +52,7 @@ public sealed class SearchMenuItemsTests(CustomWebApplicationFactory factory) : 
     {
         foreach (var name in new[] { "100% Blue Milk", "1000 Credit Feast", "Jawa_Juice", "JawaXJuice", "Back\\slash Brew" })
         {
-            await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName(name).Build(), CancellationToken);
+            await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName(name).Build(), CancellationToken);
         }
 
         var results = await SearchAsync($"q={Uri.EscapeDataString(q)}");
@@ -73,15 +73,15 @@ public sealed class SearchMenuItemsTests(CustomWebApplicationFactory factory) : 
 
     private async Task SeedCantinaMenuAsync()
     {
-        await Client.CreateMenuItemAsync(new MenuItemRequestBuilder()
+        await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder()
             .WithName("Bantha Burger").WithDescription("Smoked patty on a toasted bun.").WithType(MenuItemType.Dish).Build(), CancellationToken);
-        await Client.CreateMenuItemAsync(new MenuItemRequestBuilder()
+        await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder()
             .WithName("Blue Milk").WithDescription("Chilled bantha milk with vanilla.").WithType(MenuItemType.Drink).Build(), CancellationToken);
-        await Client.CreateMenuItemAsync(new MenuItemRequestBuilder()
+        await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder()
             .WithName("Ronto Wrap").WithDescription("Grilled ronto in flatbread.").WithType(MenuItemType.Dish).Build(), CancellationToken);
     }
 
     private async Task<PagedResponse<MenuItemResponse>> SearchAsync(string query) =>
-        await (await Client.GetAsync($"{MenuItemsRoute}/search?{query}", CancellationToken))
+        await (await AdminClient.GetAsync($"{MenuItemsRoute}/search?{query}", CancellationToken))
             .ReadJsonAsync<PagedResponse<MenuItemResponse>>(CancellationToken);
 }

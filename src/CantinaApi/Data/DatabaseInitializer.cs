@@ -1,4 +1,6 @@
+using CantinaApi.Common.Auth;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace CantinaApi.Data;
 
@@ -11,9 +13,15 @@ public static class DatabaseInitializer
 
         await db.Database.MigrateAsync(cancellationToken);
 
-        if (app.Configuration.GetValue<bool>(DbSeeder.EnabledKey))
+        var seedOptions = app.Services.GetRequiredService<IOptions<SeedOptions>>().Value;
+        if (seedOptions.Enabled)
         {
-            await DbSeeder.SeedAsync(db, app.Services.GetRequiredService<TimeProvider>(), cancellationToken);
+            await DbSeeder.SeedAsync(
+                db,
+                seedOptions,
+                app.Services.GetRequiredService<PasswordHasher>(),
+                app.Services.GetRequiredService<TimeProvider>(),
+                cancellationToken);
         }
     }
 }

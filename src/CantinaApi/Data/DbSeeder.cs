@@ -1,3 +1,4 @@
+using CantinaApi.Common.Auth;
 using CantinaApi.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -5,8 +6,6 @@ namespace CantinaApi.Data;
 
 public static class DbSeeder
 {
-    public const string EnabledKey = "Seed:Enabled";
-
     private static readonly (string Name, string Description, decimal Price)[] Dishes =
     [
         ("Bantha Burger", "Smoked bantha patty with melted cheese and moisture-farm greens on a toasted bun.", 14.50m),
@@ -35,21 +34,86 @@ public static class DbSeeder
         ("Kessel Run Espresso", "A double shot of dark espresso, ready in under twelve parsecs.", 4.25m),
     ];
 
-    // Runs after migrations on every startup, so it only seeds an empty table, deleted rows included.
-    public static async Task SeedAsync(CantinaDbContext db, TimeProvider timeProvider, CancellationToken cancellationToken = default)
+    private static readonly (string MenuItemName, int Stars, string Comment)[] CustomerRatings =
+    [
+        ("Blue Milk", 5, "Just like the Lars homestead used to make."),
+        ("Bantha Burger", 4, "Huge portion, a little heavy on the smoke."),
+        ("Jawa Juice", 3, "Fizzy and fun, but very sweet."),
+    ];
+
+    // Runs after migrations on every startup, so each step only seeds an empty table, soft-deleted rows included.
+    public static async Task SeedAsync(
+        CantinaDbContext db, SeedOptions options, PasswordHasher passwordHasher, TimeProvider timeProvider, CancellationToken cancellationToken = default)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        await SeedMenuAsync(db, now, cancellationToken);
+        await SeedUsersAndRatingsAsync(db, options, passwordHasher, now, cancellationToken);
+    }
+
+    private static async Task SeedMenuAsync(CantinaDbContext db, DateTime now, CancellationToken cancellationToken)
     {
         if (await db.MenuItems.IgnoreQueryFilters().AnyAsync(cancellationToken))
         {
             return;
         }
 
-        var now = timeProvider.GetUtcNow().UtcDateTime;
         db.MenuItems.AddRange(
             Dishes.Select(item => Create(item, MenuItemType.Dish, now))
                 .Concat(Drinks.Select(item => Create(item, MenuItemType.Drink, now))));
 
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    private static async Task SeedUsersAndRatingsAsync(
+        CantinaDbContext db, SeedOptions options, PasswordHasher passwordHasher, DateTime now, CancellationToken cancellationToken)
+    {
+        if (await db.Users.AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        if (!options.HasCredentials)
+        {
+            throw new InvalidOperationException(
+                "Seeding needs Seed:AdminEmail, Seed:AdminPassword, Seed:CustomerEmail and Seed:CustomerPassword.");
+        }
+
+        var admin = CreateUser(options.AdminName, options.AdminEmail!, options.AdminPassword!, UserRole.Admin, passwordHasher, now);
+        var customer = CreateUser(options.CustomerName, options.CustomerEmail!, options.CustomerPassword!, UserRole.Customer, passwordHasher, now);
+        db.Users.AddRange(admin, customer);
+
+        // Ratings belong to the customer only, because staff never rate their own menu.
+        var names = CustomerRatings.Select(rating => rating.MenuItemName).ToArray();
+        var menuItems = await db.MenuItems
+            .Where(m => names.Contains(m.Name))
+            .ToDictionaryAsync(m => m.Name, m => m.Id, cancellationToken);
+
+        db.Ratings.AddRange(CustomerRatings
+            .Where(rating => menuItems.ContainsKey(rating.MenuItemName))
+            .Select(rating => new Rating
+            {
+                Id = Guid.CreateVersion7(),
+                MenuItemId = menuItems[rating.MenuItemName],
+                UserId = customer.Id,
+                Stars = rating.Stars,
+                Comment = rating.Comment,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now,
+            }));
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static User CreateUser(
+        string name, string email, string password, UserRole role, PasswordHasher passwordHasher, DateTime now) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        Name = name,
+        Email = User.NormalizeEmail(email),
+        PasswordHash = passwordHasher.Hash(password),
+        Role = role,
+        CreatedAtUtc = now,
+    };
 
     private static MenuItem Create((string Name, string Description, decimal Price) item, MenuItemType type, DateTime now) => new()
     {

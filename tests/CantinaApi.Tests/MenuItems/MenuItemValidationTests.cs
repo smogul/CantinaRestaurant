@@ -26,7 +26,7 @@ public sealed class MenuItemValidationTests(CustomWebApplicationFactory factory)
         var body = new MenuItemRequestBuilder().BuildJson();
         body[field] = JsonSerializer.SerializeToNode(value);
 
-        var response = await Client.PostJsonAsync(MenuItemsRoute, body, CancellationToken);
+        var response = await AdminClient.PostJsonAsync(MenuItemsRoute, body, CancellationToken);
 
         var problem = await response.AssertProblemAsync(HttpStatusCode.BadRequest, CancellationToken);
         Assert.Contains(problem.ErrorKeys(), key => string.Equals(key, field, StringComparison.OrdinalIgnoreCase));
@@ -36,11 +36,11 @@ public sealed class MenuItemValidationTests(CustomWebApplicationFactory factory)
     [MemberData(nameof(InvalidFields))]
     public async Task Update_WithInvalidField_ReturnsValidationProblem(string field, object? value)
     {
-        var created = await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().Build(), CancellationToken);
+        var created = await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().Build(), CancellationToken);
         var body = new MenuItemRequestBuilder().BuildJson();
         body[field] = JsonSerializer.SerializeToNode(value);
 
-        var response = await Client.PutJsonAsync(MenuItemRoute(created.Id), body, CancellationToken);
+        var response = await AdminClient.PutJsonAsync(MenuItemRoute(created.Id), body, CancellationToken);
 
         await response.AssertProblemAsync(HttpStatusCode.BadRequest, CancellationToken);
     }
@@ -53,7 +53,7 @@ public sealed class MenuItemValidationTests(CustomWebApplicationFactory factory)
         var body = new MenuItemRequestBuilder().BuildJson();
         body["type"] = JsonSerializer.SerializeToNode(type);
 
-        var response = await Client.PostJsonAsync(MenuItemsRoute, body, CancellationToken);
+        var response = await AdminClient.PostJsonAsync(MenuItemsRoute, body, CancellationToken);
 
         await response.AssertProblemAsync(HttpStatusCode.BadRequest, CancellationToken);
     }
@@ -64,7 +64,7 @@ public sealed class MenuItemValidationTests(CustomWebApplicationFactory factory)
         var body = new MenuItemRequestBuilder().BuildJson();
         body.Remove("type");
 
-        var response = await Client.PostJsonAsync(MenuItemsRoute, body, CancellationToken);
+        var response = await AdminClient.PostJsonAsync(MenuItemsRoute, body, CancellationToken);
 
         var problem = await response.AssertProblemAsync(HttpStatusCode.BadRequest, CancellationToken);
         Assert.Contains(problem.ErrorKeys(), key => string.Equals(key, "type", StringComparison.OrdinalIgnoreCase));
@@ -82,7 +82,7 @@ public sealed class MenuItemValidationTests(CustomWebApplicationFactory factory)
     [InlineData(MenuItemsRoute + "/search?q=milk&pageSize=101")]
     public async Task InvalidQuery_ReturnsBadRequestProblem(string url)
     {
-        var response = await Client.GetAsync(url, CancellationToken);
+        var response = await AdminClient.GetAsync(url, CancellationToken);
 
         await response.AssertProblemAsync(HttpStatusCode.BadRequest, CancellationToken);
     }
@@ -90,7 +90,7 @@ public sealed class MenuItemValidationTests(CustomWebApplicationFactory factory)
     [Fact]
     public async Task Search_WithQueryOver100Characters_ReturnsValidationProblem()
     {
-        var response = await Client.GetAsync($"{MenuItemsRoute}/search?q={new string('a', 101)}", CancellationToken);
+        var response = await AdminClient.GetAsync($"{MenuItemsRoute}/search?q={new string('a', 101)}", CancellationToken);
 
         await response.AssertProblemAsync(HttpStatusCode.BadRequest, CancellationToken);
     }

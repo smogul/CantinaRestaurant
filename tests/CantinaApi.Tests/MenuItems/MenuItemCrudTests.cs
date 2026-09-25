@@ -23,7 +23,7 @@ public sealed class MenuItemCrudTests(CustomWebApplicationFactory factory) : Api
             .WithType(MenuItemType.Dish)
             .Build();
 
-        var response = await Client.PostJsonAsync(MenuItemsRoute, request, CancellationToken);
+        var response = await AdminClient.PostJsonAsync(MenuItemsRoute, request, CancellationToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var item = await response.ReadJsonAsync<MenuItemResponse>(CancellationToken);
@@ -40,9 +40,9 @@ public sealed class MenuItemCrudTests(CustomWebApplicationFactory factory) : Api
     [Fact]
     public async Task Get_ReturnsItemWithEmptyRatingSummary()
     {
-        var created = await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().WithType(MenuItemType.Drink).Build(), CancellationToken);
+        var created = await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().WithType(MenuItemType.Drink).Build(), CancellationToken);
 
-        var response = await Client.GetAsync(MenuItemRoute(created.Id), CancellationToken);
+        var response = await AdminClient.GetAsync(MenuItemRoute(created.Id), CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var item = await response.ReadJsonAsync<MenuItemDetailsResponse>(CancellationToken);
@@ -56,7 +56,7 @@ public sealed class MenuItemCrudTests(CustomWebApplicationFactory factory) : Api
     [Fact]
     public async Task Update_ReplacesAllFieldsAndSetsUpdatedAt()
     {
-        var created = await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().Build(), CancellationToken);
+        var created = await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().Build(), CancellationToken);
         var update = new MenuItemRequestBuilder()
             .WithName("Blue Milk")
             .WithDescription("Chilled bantha milk.")
@@ -65,7 +65,7 @@ public sealed class MenuItemCrudTests(CustomWebApplicationFactory factory) : Api
             .WithType(MenuItemType.Drink)
             .Build();
 
-        var response = await Client.PutJsonAsync(MenuItemRoute(created.Id), update, CancellationToken);
+        var response = await AdminClient.PutJsonAsync(MenuItemRoute(created.Id), update, CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var updated = await response.ReadJsonAsync<MenuItemResponse>(CancellationToken);
@@ -78,7 +78,7 @@ public sealed class MenuItemCrudTests(CustomWebApplicationFactory factory) : Api
         Assert.Equal(created.CreatedAtUtc, updated.CreatedAtUtc);
         Assert.True(updated.UpdatedAtUtc > created.UpdatedAtUtc);
 
-        var viewed = await (await Client.GetAsync(MenuItemRoute(created.Id), CancellationToken))
+        var viewed = await (await AdminClient.GetAsync(MenuItemRoute(created.Id), CancellationToken))
             .ReadJsonAsync<MenuItemDetailsResponse>(CancellationToken);
         Assert.Equal("Blue Milk", viewed.Name);
     }
@@ -86,23 +86,23 @@ public sealed class MenuItemCrudTests(CustomWebApplicationFactory factory) : Api
     [Fact]
     public async Task Delete_SoftDeletesItemAndKeepsItsRatings()
     {
-        var deleted = await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Nerf Steak").Build(), CancellationToken);
-        var kept = await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Ronto Wrap").Build(), CancellationToken);
-        await Client.RateAsync(deleted.Id, new CreateRatingRequestBuilder().WithStars(5).Build(), CancellationToken);
-        await Client.RateAsync(deleted.Id, new CreateRatingRequestBuilder().WithStars(3).Build(), CancellationToken);
+        var deleted = await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Nerf Steak").Build(), CancellationToken);
+        var kept = await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().WithName("Ronto Wrap").Build(), CancellationToken);
+        await CustomerClients[0].RateAsync(deleted.Id, new CreateRatingRequestBuilder().WithStars(5).Build(), CancellationToken);
+        await CustomerClients[1].RateAsync(deleted.Id, new CreateRatingRequestBuilder().WithStars(3).Build(), CancellationToken);
 
-        var response = await Client.DeleteAsync(MenuItemRoute(deleted.Id), CancellationToken);
+        var response = await AdminClient.DeleteAsync(MenuItemRoute(deleted.Id), CancellationToken);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
-        var view = await Client.GetAsync(MenuItemRoute(deleted.Id), CancellationToken);
+        var view = await AdminClient.GetAsync(MenuItemRoute(deleted.Id), CancellationToken);
         await view.AssertProblemAsync(HttpStatusCode.NotFound, CancellationToken);
 
-        var list = await (await Client.GetAsync(MenuItemsRoute, CancellationToken))
+        var list = await (await AdminClient.GetAsync(MenuItemsRoute, CancellationToken))
             .ReadJsonAsync<PagedResponse<MenuItemResponse>>(CancellationToken);
         Assert.Equal([kept.Id], list.Items.Select(item => item.Id));
 
-        var search = await (await Client.GetAsync($"{MenuItemsRoute}/search?q=nerf", CancellationToken))
+        var search = await (await AdminClient.GetAsync($"{MenuItemsRoute}/search?q=nerf", CancellationToken))
             .ReadJsonAsync<PagedResponse<MenuItemResponse>>(CancellationToken);
         Assert.Empty(search.Items);
 
@@ -116,10 +116,10 @@ public sealed class MenuItemCrudTests(CustomWebApplicationFactory factory) : Api
     [Fact]
     public async Task Delete_TwiceReturnsNotFound()
     {
-        var created = await Client.CreateMenuItemAsync(new MenuItemRequestBuilder().Build(), CancellationToken);
-        await Client.DeleteAsync(MenuItemRoute(created.Id), CancellationToken);
+        var created = await AdminClient.CreateMenuItemAsync(new MenuItemRequestBuilder().Build(), CancellationToken);
+        await AdminClient.DeleteAsync(MenuItemRoute(created.Id), CancellationToken);
 
-        var response = await Client.DeleteAsync(MenuItemRoute(created.Id), CancellationToken);
+        var response = await AdminClient.DeleteAsync(MenuItemRoute(created.Id), CancellationToken);
 
         await response.AssertProblemAsync(HttpStatusCode.NotFound, CancellationToken);
     }
@@ -135,10 +135,10 @@ public sealed class MenuItemCrudTests(CustomWebApplicationFactory factory) : Api
 
         var response = operation switch
         {
-            "view" => await Client.GetAsync(MenuItemRoute(id), CancellationToken),
-            "update" => await Client.PutJsonAsync(MenuItemRoute(id), new MenuItemRequestBuilder().Build(), CancellationToken),
-            "delete" => await Client.DeleteAsync(MenuItemRoute(id), CancellationToken),
-            "rate" => await Client.PostJsonAsync(RatingsRoute(id), new CreateRatingRequestBuilder().Build(), CancellationToken),
+            "view" => await AdminClient.GetAsync(MenuItemRoute(id), CancellationToken),
+            "update" => await AdminClient.PutJsonAsync(MenuItemRoute(id), new MenuItemRequestBuilder().Build(), CancellationToken),
+            "delete" => await AdminClient.DeleteAsync(MenuItemRoute(id), CancellationToken),
+            "rate" => await CustomerClient.PostJsonAsync(RatingsRoute(id), new CreateRatingRequestBuilder().Build(), CancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(operation)),
         };
 
