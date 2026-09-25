@@ -10,6 +10,10 @@ public static class DatabaseInitializer
         var db = scope.ServiceProvider.GetRequiredService<CantinaDbContext>();
 
         await db.Database.MigrateAsync(cancellationToken);
-        await DbSeeder.SeedAsync(db, cancellationToken);
+
+        if (app.Configuration.GetValue<bool>(DbSeeder.EnabledKey))
+        {
+            await DbSeeder.SeedAsync(db, app.Services.GetRequiredService<TimeProvider>(), cancellationToken);
+        }
     }
 }

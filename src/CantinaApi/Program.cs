@@ -1,5 +1,7 @@
+using System.Text.Json.Serialization;
 using CantinaApi.Common;
 using CantinaApi.Data;
+using CantinaApi.Features.MenuItems;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
@@ -24,6 +26,15 @@ builder.Services.AddProblemDetails(options =>
         context.ProblemDetails.Extensions.TryAdd("correlationId", context.HttpContext.TraceIdentifier));
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddValidation();
+
+// Enums travel as names; numbers are rejected so undefined values cannot slip through.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
+
+// Binding failures return a bare 400 in every environment, which status code pages turn into ProblemDetails.
+builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = false);
+
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddOpenApi();
 builder.Services.AddHybridCache();
 builder.Services.AddRateLimiter(options => options.RejectionStatusCode = StatusCodes.Status429TooManyRequests);
@@ -38,8 +49,9 @@ await app.MigrateAndSeedDatabaseAsync();
 // Runs ahead of the pipeline below so every request log line and response, including errors, carries the id.
 app.UseMiddleware<CorrelationIdMiddleware>();
 
-// Order matters: the exception handler must wrap everything, request logging must see failures and timings, and routing must pick the endpoint before rate limiting and auth read its metadata.
+// Order matters: the exception handler must wrap everything, status code pages give bare error codes a ProblemDetails body, request logging must see failures and timings, and routing must pick the endpoint before rate limiting and auth read its metadata.
 app.UseExceptionHandler();
+app.UseStatusCodePages();
 app.UseSerilogRequestLogging();
 app.UseRouting();
 app.UseRateLimiter();
@@ -53,5 +65,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapHealthChecks("/health", new HealthCheckOptions { ResponseWriter = HealthCheckResponseWriter.WriteAsync });
+app.MapMenuItemEndpoints();
 
 await app.RunAsync();

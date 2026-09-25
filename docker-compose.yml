@@ -6,6 +6,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ConnectionStrings__CantinaDb: ${CANTINA_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=cantina;Username=cantina;Password=change-me;GSS Encryption Mode=Disable}
+      Seed__Enabled: "true"
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:

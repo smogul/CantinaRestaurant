@@ -15,10 +15,14 @@ public sealed class GlobalExceptionHandler(IProblemDetailsService problemDetails
 
         var problemDetails = new ProblemDetails { Status = status };
 
-        // Exception details help locally but leak internals anywhere else.
-        if (environment.IsDevelopment())
+        // Bad request messages are written for clients; other exception details only show in Development.
+        if (exception is BadHttpRequestException || environment.IsDevelopment())
         {
             problemDetails.Detail = exception.Message;
+        }
+
+        if (environment.IsDevelopment())
+        {
             problemDetails.Extensions["stackTrace"] = exception.StackTrace;
         }
 
