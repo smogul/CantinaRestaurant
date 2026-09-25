@@ -1,0 +1,5 @@
+# Load tests only: layered on docker-compose.yml to squeeze the api onto hardware like the Cantina's old outer-rim server.
+services:
+  api:
+    cpus: 1.0
+    mem_limit: 512m

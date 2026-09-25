@@ -171,7 +171,29 @@ Rate limits and logs use the TCP connection's address. `X-Forwarded-For` is igno
 
 ## Performance
 
-_Documented in a later phase._
+### Load testing
+
+The load test measures five read endpoints under steady pressure, so a "before" baseline can be compared with later changes. It needs [hey](https://github.com/rakyll/hey) and [jq](https://jqlang.org) on your machine.
+
+- [docker-compose.loadtest.yml](docker-compose.loadtest.yml) layers on the normal compose file and limits the API to 1 CPU and 512 MB of memory, like the Cantina's old outer-rim server.
+- [Scripts/LoadTestSeed.sql](Scripts/LoadTestSeed.sql) adds 5,000 menu items, 200 customers and 10,000 ratings. It is safe to run more than once, because it does nothing if the data is already there.
+- [Scripts/LoadTest.sh](Scripts/LoadTest.sh) logs in as the seeded customer and runs each endpoint for 30 seconds with 50 concurrent workers, after a 5-second warm-up: list page 1, list page 200, search for `milk`, view one item, and that item's ratings. It prints requests per second, p95 latency and any non-200 responses, and saves hey's full output to `LoadTestResults/<Label>.txt`, which git ignores.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.loadtest.yml up -d --build
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < Scripts/LoadTestSeed.sql
+Scripts/LoadTest.sh Baseline
+```
+
+The script uses `BASE` (default `http://localhost:8080`), `CUSTOMER_EMAIL` and `CUSTOMER_PASSWORD`, which default to the `.env.example` values. If you changed the seeded customer in `.env`, set these to match. A run takes about three minutes. If it reports any non-200 responses, fix those first, because the numbers are not meaningful otherwise.
+
+| Endpoint | Baseline req/s | Baseline p95 ms | After req/s | After p95 ms |
+| --- | --- | --- | --- | --- |
+| List page 1 | | | | |
+| List page 200 | | | | |
+| Search milk | | | | |
+| View item | | | | |
+| Item ratings | | | | |
 
 ## Trade-offs
 

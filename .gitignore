@@ -12,3 +12,6 @@ TestResults/
 
 # Local secrets
 .env
+
+# Load test output
+LoadTestResults/
