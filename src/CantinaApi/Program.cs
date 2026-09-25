@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using CantinaApi.Common;
 using CantinaApi.Common.Auth;
+using CantinaApi.Common.Caching;
 using CantinaApi.Common.Http;
 using CantinaApi.Common.RateLimiting;
 using CantinaApi.Data;
@@ -14,14 +15,16 @@ using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Requests hand log events to a background writer instead of waiting on the console; the logger is disposed, and the buffer flushed, when the host shuts down.
 builder.Services.AddSerilog((services, logger) => logger
     .ReadFrom.Configuration(builder.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
-    .WriteTo.Console(new RenderedCompactJsonFormatter()));
+    .WriteTo.Async(sink => sink.Console(new RenderedCompactJsonFormatter())));
 
 // Resolved per context so environment variables and test overrides are always honoured.
-builder.Services.AddDbContext<CantinaDbContext>((services, options) =>
+// The factory serves cached reads, which may outlive the request that started them; it also registers the usual scoped context.
+builder.Services.AddDbContextFactory<CantinaDbContext>((services, options) =>
     options.UseNpgsql(services.GetRequiredService<IConfiguration>().GetConnectionString("CantinaDb")
         ?? throw new InvalidOperationException("Connection string 'CantinaDb' is not configured.")));
 
@@ -46,6 +49,10 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddOptions<SeedOptions>().Bind(builder.Configuration.GetSection(SeedOptions.SectionName));
 builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 builder.Services.AddHybridCache();
+builder.Services.AddOptions<CachingOptions>()
+    .Bind(builder.Configuration.GetSection(CachingOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 builder.Services.AddCantinaRateLimiting();
 builder.Services.AddCantinaForwardedHeaders();
 builder.Services.AddCantinaAuth(builder.Configuration);

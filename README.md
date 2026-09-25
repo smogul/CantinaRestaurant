@@ -171,6 +171,47 @@ Rate limits and logs use the TCP connection's address. `X-Forwarded-For` is igno
 
 ## Performance
 
+The goal was more throughput from the same small server without changing any request or response. Every change below started from evidence rather than guesswork.
+
+### What changed and why
+
+- **Query plan investigation first.** Before touching anything, the SQL that EF Core generates for each read endpoint was run through `EXPLAIN (ANALYZE, BUFFERS)` against the load-test data. The plans and a note on each are in [Docs/Performance/QueryPlansBefore.md](Docs/Performance/QueryPlansBefore.md), and the same plans after the changes are in [Docs/Performance/QueryPlansAfter.md](Docs/Performance/QueryPlansAfter.md). Every index added had to be justified by a plan. Two candidates were rejected because the plans showed they would not help: a separate `(Type, Name)` index and a descending `(MenuItemId, CreatedAtUtc)` rating index.
+- **Trigram and ordering indexes.** Search used to run `ILIKE '%term%'` against every row. The `pg_trgm` extension and GIN trigram indexes on `Name` and `Description` let Postgres find matching rows from the index instead. Lists and searches always sort by name, so a partial index on `(Name, Id)` for live items returns a page already in order without sorting the table. All three indexes skip soft-deleted rows. In the plans, list page 1 went from 1.7 ms to 0.08 ms and a search page from 5.2 ms to 0.16 ms.
+- **Stored rating stats.** Viewing an item used to average and count its ratings on every request. `MenuItems` now stores `AverageRating` and `RatingCount`, and the migration fills them from existing ratings. Every rating write recalculates them from the `Ratings` table in the same transaction, after locking the item row, so concurrent ratings on one item take turns and none can be lost. Recalculating from source rather than adding to a running total means the stored values can never drift. The average is stored already rounded to one decimal, the precision the API returns.
+- **HybridCache with tags and stampede protection.** List, search, view and ratings responses are cached in memory, for 60 seconds (`Caching:MenuSeconds`) or 30 seconds for search (`Caching:SearchSeconds`). Writes invalidate by tag: any menu change clears list, search and view entries (`menu-items`), and a rating clears that item's view and ratings pages (`menu-item:{id}`, `ratings:{id}`). When many requests miss the same key at once, HybridCache runs one database query and shares the result, so an expiring popular page cannot trigger a stampede. The cached records are sealed and marked `[ImmutableObject(true)]`, so every hit returns the stored instance instead of deserialising a copy.
+- **Asynchronous logging.** Serilog now hands each log event to a background writer (`Serilog.Sinks.Async`) instead of making the request wait on the console. The JSON format and correlation ids are unchanged, and the buffer is flushed when the app shuts down.
+
+### Cache safety rules
+
+- **Shared data only.** Cached responses are identical for every signed-in user. Anything that depends on who is asking must never be cached this way. Authentication and authorisation run before the handler, so a cached entry is never served without a valid token.
+- **Invalidate after commit.** Tags are cleared only after the database write has committed, so a concurrent read cannot cache the old data again in between.
+- **Not-found results are not cached.** A 404 for an unknown id always goes to the database, so requests for random ids cannot fill memory with empty entries.
+- **Bounded key growth.** Search keys include the trimmed, lowercased query, so each distinct search adds an entry. The query is capped at 100 characters and entries expire after 30 seconds. Per-user rate limiting, planned for Phase 5, will also bound how many distinct searches a single user can create.
+
+### Limitations
+
+- Trigram indexes only help search terms of 3 or more characters. Shorter terms still scan the live rows.
+- Deep pages, such as page 200, still scan and sort: at Postgres's default `random_page_cost` the planner prefers that over walking the index, even though the forced index path was faster on this data. Lowering `random_page_cost` for SSD storage, or keyset pagination, would fix it.
+- The cache lives in each API instance's memory, so separate instances each hold their own copy.
+
+### Why no response compression
+
+Compressing responses was deliberately left out. The API returns authenticated, dynamic JSON over HTTPS, and compressing secrets alongside attacker-influenced content, such as a search term reflected in the response, exposes it to the CRIME and BREACH family of attacks, which recover data from compressed sizes. Compression belongs at the reverse proxy, where it can be applied selectively to safe content.
+
+### Beyond this hardware
+
+When one server is no longer enough, these are the next steps, roughly in order:
+
+- **Horizontal scaling.** Run several API instances behind a load balancer. JWT authentication is stateless, so any instance can serve any request.
+- **Redis as the HybridCache second level.** Registering a Redis `IDistributedCache` gives every instance one shared cache. It is a registration change only; the handlers stay the same.
+- **A distributed rate limiter.** The login and register limits count per instance today, so several instances need a shared store for them to hold.
+- **PgBouncer and read replicas.** Connection pooling keeps many instances from exhausting Postgres connections, and read replicas take the read-heavy menu traffic.
+- **Images on a CDN or blob storage.** Menu images should be served from a CDN, not by the API.
+- **Keyset pagination.** Paging by "after this name and id" instead of an offset makes deep pages as cheap as the first.
+- **A dedicated search engine.** If search grows beyond what trigram indexes handle well, move it to a search engine.
+- **Separately scaled login instances.** BCrypt is deliberately CPU-heavy, so login traffic can run on its own instances without slowing the menu.
+- **OpenTelemetry metrics.** Request rates, latencies and cache hit ratios show when to scale, rather than guessing.
+
 ### Load testing
 
 The load test measures five read endpoints under steady pressure, so a "before" baseline can be compared with later changes. It needs [hey](https://github.com/rakyll/hey) and [jq](https://jqlang.org) on your machine.

@@ -66,6 +66,20 @@ BEGIN
     FROM load_test_users AS u
     CROSS JOIN generate_series(0, 49) AS k
     JOIN load_test_items AS i ON i.n = ((u.n - 1) * 50 + k) % 5000 + 1;
+
+    -- Schemas with stored rating stats need them refreshed after the bulk insert; older schemas skip this so Baseline runs still work.
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'MenuItems' AND column_name = 'RatingCount') THEN
+        EXECUTE $stats$
+            UPDATE "MenuItems" AS m
+            SET "RatingCount" = s.rating_count, "AverageRating" = s.average_rating
+            FROM (
+                SELECT "MenuItemId", count(*)::int AS rating_count, round(avg("Stars"), 1) AS average_rating
+                FROM "Ratings"
+                GROUP BY "MenuItemId"
+            ) AS s
+            WHERE m."Id" = s."MenuItemId"
+        $stats$;
+    END IF;
 END $$;
 
 SELECT

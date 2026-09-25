@@ -1,9 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using CantinaApi.Common;
+using CantinaApi.Common.Caching;
 using CantinaApi.Data;
 using CantinaApi.Data.Entities;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Options;
 
 namespace CantinaApi.Features.MenuItems;
 
@@ -21,7 +24,9 @@ public static class SearchMenuItems
         [Required, StringLength(MaxQueryLength, MinimumLength = 1)] string? q,
         [AsParameters] PageRequest page,
         [EnumDataType(typeof(MenuItemType))] MenuItemType? type,
-        CantinaDbContext db,
+        IDbContextFactory<CantinaDbContext> dbFactory,
+        HybridCache cache,
+        IOptions<CachingOptions> caching,
         CancellationToken cancellationToken)
     {
         // Built-in validation skips [Required] when q is absent from the query string, so check it here.
@@ -33,7 +38,25 @@ public static class SearchMenuItems
             });
         }
 
-        var pattern = $"%{EscapeLikePattern(q)}%";
+        // The match ignores case, so trimming and lowercasing gives one cache entry for every spelling of the same search.
+        var term = q.Trim();
+        var results = await cache.GetOrLoadAsync(
+            CacheKeys.MenuSearch(term.ToLowerInvariant(), type, page),
+            async token => await LoadAsync(dbFactory, term, type, page, token),
+            caching.Value.SearchEntry,
+            [CacheKeys.MenuItemsTag],
+            cancellationToken);
+
+        return TypedResults.Ok(results);
+    }
+
+    // The factory builds its own context because its result may be shared with other requests waiting on the same key.
+    private static async Task<PagedResponse<MenuItemResponse>> LoadAsync(
+        IDbContextFactory<CantinaDbContext> dbFactory, string term, MenuItemType? type, PageRequest page, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var pattern = $"%{EscapeLikePattern(term)}%";
         var query = db.MenuItems
             .AsNoTracking()
             .Where(m => EF.Functions.ILike(m.Name, pattern, EscapeCharacter)
@@ -44,13 +67,11 @@ public static class SearchMenuItems
             query = query.Where(m => m.Type == type);
         }
 
-        var results = await query
+        return await query
             .OrderBy(m => m.Name)
             .ThenBy(m => m.Id)
             .Select(MenuItemMappings.ToResponse)
             .ToPagedResponseAsync(page, cancellationToken);
-
-        return TypedResults.Ok(results);
     }
 
     // Wildcards typed by the user must match literally, so they are escaped before wrapping in %.

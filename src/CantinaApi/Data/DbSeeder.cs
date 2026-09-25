@@ -102,6 +102,7 @@ public static class DbSeeder
             }));
 
         await db.SaveChangesAsync(cancellationToken);
+        await RatingStats.RecalculateAllAsync(db, cancellationToken);
     }
 
     private static User CreateUser(

@@ -2,6 +2,7 @@ using CantinaApi.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
@@ -19,6 +20,10 @@ public sealed class CustomWebApplicationFactory(PostgresFixture postgres) : WebA
     public TestUsers Users { get; private set; } = null!;
 
     // Starts at the real time so tokens look normal; each read nudges it forward so consecutive timestamps still differ.
+    public DatabaseCommandCounter DatabaseCommands { get; } = new();
+
+    public RatingWriteDelay RatingWriteDelay { get; } = new();
+
     public FakeTimeProvider Time { get; } = new(DateTimeOffset.UtcNow) { AutoAdvanceAmount = TimeSpan.FromMilliseconds(1) };
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -39,6 +44,7 @@ public sealed class CustomWebApplicationFactory(PostgresFixture postgres) : WebA
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Time);
             services.AddSingleton<IStartupFilter, TestClientIpStartupFilter>();
+            services.ConfigureDbContext<CantinaDbContext>(options => options.AddInterceptors(DatabaseCommands, RatingWriteDelay));
         });
     }
 
@@ -65,5 +71,8 @@ public sealed class CustomWebApplicationFactory(PostgresFixture postgres) : WebA
             + " RESTART IDENTITY CASCADE";
 
         await db.Database.ExecuteSqlRawAsync(_truncateSql, cancellationToken);
+
+        // The wildcard tag invalidates every cached entry, so no test sees data cached by an earlier one.
+        await scope.ServiceProvider.GetRequiredService<HybridCache>().RemoveByTagAsync("*", cancellationToken);
     }
 }

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Linq.Expressions;
 using CantinaApi.Common;
@@ -12,6 +13,7 @@ public sealed record MenuItemRequest(
     [property: Required, MaxLength(MenuItem.ImageUrlMaxLength), Url, HttpUrl] string ImageUrl,
     [property: Required] MenuItemType? Type);
 
+[ImmutableObject(true)]
 public sealed record MenuItemResponse(
     Guid Id,
     string Name,
@@ -22,6 +24,7 @@ public sealed record MenuItemResponse(
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc);
 
+[ImmutableObject(true)]
 public sealed record MenuItemDetailsResponse(
     Guid Id,
     string Name,

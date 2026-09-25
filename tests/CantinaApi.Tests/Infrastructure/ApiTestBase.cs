@@ -22,6 +22,10 @@ public abstract class ApiTestBase : IAsyncLifetime
 
     protected FakeTimeProvider Time => _factory.Time;
 
+    protected DatabaseCommandCounter DatabaseCommands => _factory.DatabaseCommands;
+
+    protected RatingWriteDelay RatingWriteDelay => _factory.RatingWriteDelay;
+
     protected DateTime UtcNow => Time.GetUtcNow().UtcDateTime;
 
     protected HttpClient AnonymousClient { get; }

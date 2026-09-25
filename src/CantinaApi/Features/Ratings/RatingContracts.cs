@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Linq.Expressions;
 using CantinaApi.Data.Entities;
@@ -10,6 +11,7 @@ public sealed record CreateRatingRequest(
     [property: MaxLength(Rating.CommentMaxLength)] string? Comment);
 
 // Shows the reviewer's name only; emails stay private.
+[ImmutableObject(true)]
 public sealed record RatingResponse(
     Guid Id,
     Guid MenuItemId,

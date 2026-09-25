@@ -11,6 +11,8 @@ public sealed class CantinaDbContext(DbContextOptions<CantinaDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Provides the trigram operators used by the menu search indexes.
+        modelBuilder.HasPostgresExtension("pg_trgm");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CantinaDbContext).Assembly);
     }
 }

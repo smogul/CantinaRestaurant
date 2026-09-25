@@ -16,5 +16,9 @@ public sealed class MenuItem
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
 
+    // Stored rating stats, recalculated from Ratings on every rating write so reads skip the aggregation.
+    public decimal? AverageRating { get; set; }
+    public int RatingCount { get; set; }
+
     public List<Rating> Ratings { get; set; } = [];
 }
